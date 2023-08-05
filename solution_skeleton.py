@@ -1,3 +1,5 @@
+# %%
+
 import numpy as np
 import pandas as pd
 import datetime
@@ -267,4 +269,5 @@ fig1, df_rtn = plot_total_return(
     df_weights_index=df_weights_index,
     df_weights_portfolio=df_weights_portfolio,
 )
+
 fig1
