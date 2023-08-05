@@ -92,7 +92,7 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
         # vol calc
         df_w = pd.DataFrame()
         df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
+        df_w['inv_vol'] = 1/df_w['vol']**0.25                   # calculate the inverse volatility
         df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
         df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
         df_w.reset_index(inplace=True, names='name')
