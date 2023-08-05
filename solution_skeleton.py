@@ -3,8 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import plotly.express as px
-import random
-
+from scipy.optimize import minimize
 
 print("---Python script Start---", str(datetime.datetime.now()))
 
@@ -97,28 +96,47 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # We use a static Inverse Volatility Weighting (https://en.wikipedia.org/wiki/Inverse-variance_weighting)
     # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
+
+    def sharpe_ratio(
+        weights: np.ndarray, expected_returns: pd.Series, cov_matrix: pd.DataFrame
+    ):
+        portfolio_return = np.dot(weights, expected_returns)
+        portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+        sharpe_ratio = portfolio_return / 0.5*(100*portfolio_volatility)**3
+        return sharpe_ratio  # negative for minimization problem
+
     for i in range(len(df_test)):
-        # latest data at this point
         df_latest = df_returns[(df_returns["month_end"] < df_test.loc[i, "month_end"])]
 
-        # vol calc
-        df_w = pd.DataFrame()
-        df_w["vol"] = df_latest.std(numeric_only=True)  # calculate stock volatility
-        df_w["inv_vol"] = 1 / 100 * df_w["vol"]**2  # calculate the inverse volatility
-        df_w["tot_inv_vol"] = df_w[
-            "inv_vol"
-        ].sum()  # calculate the total inverse volatility
-        df_w["weight"] = (
-            (df_w["inv_vol"] / df_w["tot_inv_vol"] * 1.076)
-        )  # calculate weight based on inverse volatility
-        df_w.reset_index(inplace=True, names="name")
+        expected_returns = df_latest.drop(columns=["month_end"]).mean()
+        cov_matrix = df_latest.drop(columns=["month_end"]).cov()
 
-        # add to all weights
-        df_this = pd.DataFrame(
-            data=[[df_test.loc[i, "month_end"]] + df_w["weight"].to_list()],
-            columns=df_latest.columns,
+        num_stocks = len(list_stocks)
+        initial_weights = np.ones(num_stocks) / num_stocks
+        bounds = [(0, 1) for _ in range(num_stocks)]  # Each weight between 0 and 1
+        constraints = [
+            {
+                "type": "eq",
+                "fun": lambda w: np.sum(w) - 1,
+            },  # Sum of weights equals 1 constraint
+            {"type": "ineq", "fun": lambda w: 0.10 - w},  # Each weight not exceed 10%
+        ]
+
+        opt_result = minimize(
+            lambda w: sharpe_ratio(w, expected_returns, cov_matrix),
+            initial_weights,
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints,
+            options={"disp": False},
         )
-        df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
+        optimized_weights = opt_result.x
+
+        df_this = pd.DataFrame(
+            data=[[df_test.loc[i, "month_end"]] + list(optimized_weights)],
+            columns=["month_end"] + list_stocks,
+        )
+        df_weights = pd.concat([df_weights, df_this], ignore_index=True)
 
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
 
@@ -199,6 +217,8 @@ fig1, df_rtn = plot_total_return(
     df_weights_index=df_weights_index,
     df_weights_portfolio=df_weights_portfolio,
 )
+print("DONE")
+
 fig1
 
 # %%
