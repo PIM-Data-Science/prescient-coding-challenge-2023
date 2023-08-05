@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import plotly.express as px
+import tensorflow as tf
 
 
 print('---Python script Start---', str(datetime.datetime.now()))
@@ -19,19 +20,19 @@ df_returns_test['month_end'] = pd.to_datetime(arg=df_returns_test['month_end']).
 
 def equalise_weights(df: pd.DataFrame):
 
-    '''
-        Function to generate the equal weights, i.e. 1/p for each active stock within a month
+    # '''
+    #     Function to generate the equal weights, i.e. 1/p for each active stock within a month
 
-        Args:
-            df: A return data frame. First column is month end and remaining columns are stocks
+    #     Args:
+    #         df: A return data frame. First column is month end and remaining columns are stocks
 
-        Returns:
-            A dataframe of the same dimension but with values 1/p on active funds within a month
+    #     Returns:
+    #         A dataframe of the same dimension but with values 1/p on active funds within a month
 
-    '''
+    # '''
 
     # create df to house weights
-    n_length = len(df)
+    n_length = len(df) #number of rows
     df_returns = df
     df_weights = df_returns[:n_length].copy()
     df_weights.set_index('month_end', inplace=True)
@@ -84,22 +85,51 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
     
+    # Define the neural network model for portfolio optimization
+    def create_portfolio_model(input_shape, num_stocks):
+        model = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation='relu', input_shape=input_shape),
+            tf.keras.layers.Dense(32, activation='relu'),
+            tf.keras.layers.Dense(num_stocks, activation='softmax')
+        ])
+        return model
+
+    # New function to calculate portfolio weights using the trained model
+    def get_portfolio_weights(model, df_latest):
+        returns_data = np.array(df_latest.drop(columns=['month_end']))
+        predictions = model.predict(returns_data)
+        normalized_weights = np.clip(predictions, 0, 0.1)  # Clip weights to ensure no stock > 10%
+        weights_sum = np.sum(normalized_weights, axis=1, keepdims=True)
+        portfolio_weights = normalized_weights / weights_sum
+        return portfolio_weights
+
+    # New function for training the portfolio model using backpropagation
+    def train_portfolio_model(df_train, epochs=3000, batch_size=25):
+        num_stocks = len(df_train.columns) - 1
+        input_shape = (num_stocks,)
+        model = create_portfolio_model(input_shape, num_stocks)
+
+        x_train = np.array(df_train.drop(columns=['month_end']))
+        y_train = x_train  # Input and output are the same for this self-supervised learning
+
+        model.compile(optimizer='adam', loss='mse')
+        model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, verbose=0)
+        return model
+
+    # Create and train the portfolio model
+    model = train_portfolio_model(df_train)
+
     for i in range(len(df_test)):
-
-        # latest data at this point
         df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-                
-        # vol calc
-        df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
-        df_w.reset_index(inplace=True, names='name')
 
-        # add to all weights
-        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
+        # Get portfolio weights from the model
+        portfolio_weights = get_portfolio_weights(model, df_latest)
+
+        # Convert weights to DataFrame format
+        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + portfolio_weights.tolist()[0]],
+                               columns=df_latest.columns)
         df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
+
     
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
     
@@ -171,3 +201,5 @@ df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
 fig1
+
+# %%
