@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import plotly.express as px
+import matplotlib.pyplot as plt
 
 
 print('---Python script Start---', str(datetime.datetime.now()))
@@ -88,14 +89,21 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
 
         # latest data at this point
         df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-                
+        
         # vol calc
         df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
+        df_w['vol'] = df_latest.std(numeric_only=True)
+        
+        df_w['running_mean'] = df_latest.tail(15).mean(numeric_only=True) #Get the running mean of the stock change
+        df_w['inv_vol'] = 1/(10*df_w['vol']+10) #Decrease the weighting given to variable stocks
+        
+        df_w['base'] = df_w['inv_vol'].multiply(df_w['running_mean']).clip(lower=0) #if a stock is variable, it gets lower weightings. If it is going negative, zero 
+        df_w['tot_base'] = df_w['base'].sum()
         df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
+        #df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
+        df_w['weight'] = (df_w['base']/df_w['tot_base']).clip(upper=0.1)
         df_w.reset_index(inplace=True, names='name')
+
 
         # add to all weights
         df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
@@ -171,3 +179,5 @@ df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
 fig1
+
+# %%
