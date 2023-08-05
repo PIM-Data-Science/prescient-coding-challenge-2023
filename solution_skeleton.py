@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import plotly.express as px
-
+from scipy.optimize import minimize
 
 print('---Python script Start---', str(datetime.datetime.now()))
 
@@ -64,6 +64,10 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     print('---> training set spans', df_train['month_end'].min(), df_train['month_end'].max())
     print('---> training set spans', df_test['month_end'].min(), df_test['month_end'].max())
 
+    # Sort the dataframes
+    df_train.sort_values(by='month_end', inplace=True)
+    df_test.sort_values(by='month_end', inplace=True)
+
     # initialise data
     n_train = len(df_train)
     df_returns = pd.concat(objs=[df_train, df_test], ignore_index=True)
@@ -80,21 +84,96 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # your methodology. Below we provide a simple, naive estimation to illustrate 
     # how we think you should go about structuring your submission and your comments:
 
-    # We use a static Inverse Volatility Weighting (https://en.wikipedia.org/wiki/Inverse-variance_weighting) 
-    # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
     
+    total_returns = np.array(df_returns[list_stocks])
+    total_returns = total_returns.sum(axis=1)
+
+    weights = np.ones(len(list_stocks))/len(list_stocks)
+
     for i in range(len(df_test)):
 
         # latest data at this point
         df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-                
-        # vol calc
+        df_latest = df_latest.sort_values(by='month_end', ascending=True)
+        np_df_latest = np.array(df_latest[list_stocks])
+
+        #find the lowest performing n stocks for a time interval of current to t months in the past
+        #parameters
+        t = 2
+        l = len(np_df_latest)
+        r_difference_threshold = 0  #must be <= 0 for it to work
+        reccession_threshold = 10
+        
+        stock_returns_t = np_df_latest[l-t]
+        stock_returns_l = np_df_latest[l-1]
+
+        reccession = False
+        count = 0
+        reccession_count = 0
+        ignore_indices = []
+
+        for i in range(len(stock_returns_t)):
+            if stock_returns_l[i] - stock_returns_t[i] < r_difference_threshold:
+                 count +=1
+        
+        if count > reccession_threshold:
+            reccession = True
+            reccession_count +=1
+
+        for i in range(len(stock_returns_t)):
+            
+            if reccession:
+                if stock_returns_l[i] - stock_returns_t[i] < r_difference_threshold:
+                    ignore_indices.append(i)
+
+
+        # Derive weights that would have been best for previous month
+        # We do this by optimizing a linear function
+        # We then set the current weights to be the same as the previous month
+        x_values = np_df_latest[-1, :]
+
+        # Remove the stocks that are in reccession
+        x_values = np.delete(x_values, ignore_indices)
+
+
+        def linear_function(c, x_values):
+            return -np.dot(c, x_values)
+
+        # Constraint function to enforce that c is between 0 and 0.1 (inclusive) and sum up to 1
+        def constraint(c):
+            return [0.1 - c_i for c_i in c] + [1 - np.sum(c)]
+
+        # Initial guess for c (can be any value as long as it satisfies the constraint)
+        initial_guess = np.ones(len(x_values))/len(x_values)
+
+        # Bounds for each c element to be between 0 and 0.1
+        bounds = [(0, 0.1)] * len(x_values)
+
+        # Constraint definition
+        constraint_definition = {'type': 'ineq', 'fun': constraint}
+
+        # Minimize the linear function subject to the constraint
+        result = minimize(linear_function, initial_guess, args=(x_values,), method='SLSQP', bounds=bounds, constraints=constraint_definition)
+
+        # The optimized values of c1, c2, ..., cn
+        optimal_w_values = result.x
+
+        if round(optimal_w_values.sum(), 3) == 1:
+            weights = optimal_w_values
+            weights = np.zeros(len(list_stocks))
+            indices = np.arange(len(list_stocks))
+            indices = np.delete(indices, ignore_indices)
+            weights[indices] = optimal_w_values
+            assert weights[ignore_indices].sum() == 0
+
+
+        assert round(weights.sum(), 3) == 1
+
+        df_latest.loc[:, list_stocks] = np_df_latest
+        
         df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
+        df_w['weight'] = weights
         df_w.reset_index(inplace=True, names='name')
 
         # add to all weights
@@ -170,4 +249,4 @@ df_returns = pd.concat(objs=[df_returns_train, df_returns_test], ignore_index=Tr
 df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
-fig1
+fig1.show()
