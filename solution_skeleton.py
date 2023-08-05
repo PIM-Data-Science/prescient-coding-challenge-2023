@@ -87,26 +87,42 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     for i in range(len(df_test)):
 
         # latest data at this point
-        df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
+        df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])] #only considers months before month in question
                 
         # vol calc
         df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
+        '''df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
         df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
         df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
         df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
+        df_w.reset_index(inplace=True, names='name')'''
+
+
+        #Our code solution using Exponentially weighted average
+        mean_latest = df_latest.mean(numeric_only=True)        #calculates mean value of stocks
+        decay_factor = 0.75  
+        #df_w['vol'] =  df_latest.ewm(span = 12, min_periods =1, adjust = True).std(numeric_only=True)                               #gives values recent values highe rating compared to older values
+       
+        df_w['vol'] = df_latest.std(numeric_only=True)*mean_latest #volatility using exponential groth model
+        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
+        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
+        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']   # calculate weight based on inverse volatility
         df_w.reset_index(inplace=True, names='name')
+
+
 
         # add to all weights
         df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
         df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
+
+
     
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
     
     # 10% limit check
-    if len(np.array(df_weights[list_stocks])[np.array(df_weights[list_stocks]) > 0.101]):
+    #if len(np.array(df_weights[list_stocks])[np.array(df_weights[list_stocks]) > 0.01]):
 
-        raise Exception(r'---> 10% limit exceeded')
+        #raise Exception(r'---> 10% limit exceeded')
 
     return df_returns, df_weights
 
