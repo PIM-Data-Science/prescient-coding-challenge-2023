@@ -203,3 +203,22 @@ fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, 
 fig1
 
 # %%
+
+
+# Using an Artificial Neural Network (ANN) and backpropagation to generate the weights for the portfolio was the approach we used and for the following reasons we chose it:
+
+# 1. Non-linearity: ANNs can capture complex and non-linear relationships in the data. The stock market often exhibits non-linear patterns, and an ANN can better model these intricate interactions among different stocks.
+
+# 2. Flexibility: ANNs can handle various types of data, including both numerical and categorical variables. This flexibility allows them to incorporate additional information, such as macroeconomic indicators or sector-specific data, which can improve the portfolio weight generation process.
+
+# 3. Adaptability: The stock market is dynamic, and the relationships between different stocks may change over time. ANNs, especially when combined with backpropagation, can adapt and update the weights based on new incoming data, allowing the portfolio to adjust to changing market conditions.
+
+# 4. Risk Management: ANNs can be integrated into the portfolio optimization process to consider risk factors beyond volatility. By training the ANN on historical data, it can learn to account for factors like downside risk, correlation between stocks, and other risk metrics, resulting in a more robust and risk-aware portfolio.
+
+# 5. Portfolio Diversification: ANNs can optimize for diversification by learning to allocate weights in a way that minimizes the correlation among stocks. Diversification is a key aspect of risk reduction in a portfolio, and ANNs can help achieve this more efficiently.
+
+# 6. Speed and Efficiency: Once the ANN is trained, generating portfolio weights for each time period is computationally efficient. It can quickly process large datasets and produce weight allocations, making it suitable for real-time or frequent rebalancing strategies.
+
+# 7. Adoption of New Information: As new data becomes available, the ANN can continuously update the portfolio weights, allowing it to adapt to market changes and incorporate the most recent information into the investment decisions.
+
+# However, it's important to note that using an ANN for portfolio optimization also comes with challenges, such as model complexity, data overfitting, and the need for appropriate hyperparameter tuning. This model also may require bigger training data but the following solutions we produced was able to surpass the benchmark and inverse volatility approach.
