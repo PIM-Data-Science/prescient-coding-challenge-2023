@@ -84,12 +84,10 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
 
-    window_size = 15
-
     for i in range(len(df_test)):
 
         # calculate covariance matrix and mean
-        cov_matrix, mean_returns = df_returns[list_stocks].iloc[-window_size:].cov(), df_returns[list_stocks].iloc[-window_size:].mean()
+        cov_matrix, mean_returns = df_returns[list_stocks].cov(), df_returns[list_stocks].mean()
 
         # perform mean-variance
         optimized_weights = np.linalg.inv(cov_matrix) @ mean_returns
