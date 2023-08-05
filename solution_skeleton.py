@@ -5,6 +5,7 @@ import datetime
 import plotly.express as px
 
 
+
 print('---Python script Start---', str(datetime.datetime.now()))
 
 # %%
@@ -75,7 +76,7 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     list_stocks.remove('month_end')
 
     # <<--------------------- YOUR CODE GOES BELOW THIS LINE --------------------->>
-
+    df_weights = df_weights*1.7
     # This is your playground. Delete/modify any of the code here and replace with 
     # your methodology. Below we provide a simple, naive estimation to illustrate 
     # how we think you should go about structuring your submission and your comments:
@@ -95,6 +96,7 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
         df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
         df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
         df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
+       
         df_w.reset_index(inplace=True, names='name')
 
         # add to all weights
@@ -104,6 +106,7 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
     
     # 10% limit check
+    #print(df_w)
     if len(np.array(df_weights[list_stocks])[np.array(df_weights[list_stocks]) > 0.101]):
 
         raise Exception(r'---> 10% limit exceeded')
@@ -170,4 +173,6 @@ df_returns = pd.concat(objs=[df_returns_train, df_returns_test], ignore_index=Tr
 df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
-fig1
+fig1.show()
+
+
