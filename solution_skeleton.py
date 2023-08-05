@@ -1,4 +1,5 @@
 # %%
+
 import numpy as np
 import pandas as pd
 import datetime
@@ -14,8 +15,6 @@ df_returns_train = pd.read_csv('data/returns_train.csv')
 df_returns_test = pd.read_csv('data/returns_test.csv')
 df_returns_train['month_end'] = pd.to_datetime(arg=df_returns_train['month_end']).apply(lambda d: d.date())
 df_returns_test['month_end'] = pd.to_datetime(arg=df_returns_test['month_end']).apply(lambda d: d.date())
-
-
 
 # %%
 
@@ -40,7 +39,7 @@ def equalise_weights(df: pd.DataFrame):
 
     # list of stock names
     list_stocks = list(df_returns.columns)
-    list_stocks.remove('month_end') #so only stock names
+    list_stocks.remove('month_end')
 
     # assign 1/p
     df_weights[list_stocks] = 1/len(list_stocks)
@@ -50,8 +49,19 @@ def equalise_weights(df: pd.DataFrame):
 
 # %%
 
+from sklearn.linear_model import LinearRegression
+
+def predict_returns(df_train, df_test):
+    model = LinearRegression()
+    features = df_train.drop(columns=['month_end'])
+    target = df_train.iloc[:, -1]
+
+    model.fit(features, target)
+    predicted_returns = model.predict(df_test.drop(columns=['month_end']))
+
+    return predicted_returns
+
 def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
-    import random 
     '''
         Function to generate stocks weight allocation for time t+1 using historic data. Initial weights generated as 1/p for active stock within a month
 
@@ -62,66 +72,57 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
         Returns:
             The returns dataframe and the weights
     '''
-
     print('---> training set spans', df_train['month_end'].min(), df_train['month_end'].max())
     print('---> training set spans', df_test['month_end'].min(), df_test['month_end'].max())
 
-    # initialise data
-    n_train = len(df_train)
-    df_returns = pd.concat(objs=[df_train, df_test], ignore_index=True)
+    # Combine training and testing data for easier calculations
+    df_returns = pd.concat([df_train, df_test], ignore_index=True)
 
-    df_weights = equalise_weights(df_returns[:n_train]) # df to store weights and create initial
-
+    df_weights = equalise_weights(df_train)  # df to store weights and create initial
 
     # list of stock names
-    list_stocks = list(df_returns.columns)
-    list_stocks.remove('month_end')
+    list_stocks = df_train.columns.drop('month_end')
 
-    # <<--------------------- YOUR CODE GOES BELOW THIS LINE --------------------->>
-   
-
-    # This is your playground. Delete/modify any of the code here and replace with 
-    # your methodology. Below we provide a simple, naive estimation to illustrate 
-    # how we think you should go about structuring your submission and your comments:
-
-    # We use a static Inverse Volatility Weighting (https://en.wikipedia.org/wiki/Inverse-variance_weighting) 
-    # strategy to generate portfolio weights.
-    # Use the latest available data at that point in time
-    
+    # Loop through each time step in df_test
     for i in range(len(df_test)):
+        # Latest data at this point
+        df_latest = df_returns[df_returns['month_end'] < df_test.loc[i, 'month_end']]
 
-        # latest data at this point
-        df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-        print(df_latest["Stock50"])
-        df_latest.sort_values(by=["Stock1","Stock10","Stock11","Stock14","Stock16","Stock18","Stock19","Stock20","Stock21","Stock22","Stock26","Stock3","Stock30","Stock31","Stock33","Stock34","Stock35","Stock38","Stock39","Stock4","Stock40","Stock41","Stock43","Stock44","Stock46","Stock47","Stock49","Stock5","Stock50","Stock54","Stock56","Stock59","Stock6","Stock61","Stock63","Stock64","Stock66","Stock69","Stock7","Stock70","Stock73","Stock75","Stock76","Stock77","Stock78","Stock79","Stock80","Stock81","Stock84","Stock85","Stock86","Stock87","Stock88","Stock9"])
-      
+        # Use machine learning to predict future returns
+        predicted_returns = predict_returns(df_latest, df_test.iloc[[i]])
+
         # vol calc
         df_w = pd.DataFrame()
         df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        # df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
+        df_w['inv_vol'] = 1 / df_w['vol']                        # calculate the inverse volatility
+        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()              # calculate the total inverse volatility
 
-        # Age-Weighted VaR
-        lam = random.uniform(0.9, 1) #we’re picking this arbitrarily
-        n = 54
-        wts = [(lam**(i-1) * (1-lam))/(1-lam**n) for i in range(1, n+1)] #want to start on day 1, not day 0
-        
-        df_w['weight'] = wts
+        # Apply your custom weighting algorithm here based on inverse volatility and predicted returns
+        # Assuming the weights cannot exceed 10% and setting zero weight for negative returns.
+        df_w['weight'] = np.where(
+            (predicted_returns > 0) & (predicted_returns == predicted_returns),  # Filtering non-NaN positive returns
+            (df_w['inv_vol'] / df_w['tot_inv_vol']) * 0.10,
+            0.0
+        )
 
-        df_w.reset_index(inplace=True, names='name')
+        # Increase prioritization weighting on higher return stocks by applying power transformation.
+        scaling_factor = 1.5  # Adjust this scaling factor as needed.
+        df_w['weight'] = df_w['weight'] ** scaling_factor
 
+        # Normalize the weights to sum up to 1 after applying the scaling factor.
+        df_w['weight'] /= df_w['weight'].sum()
 
-        # add to all weights
-        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
-        df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
-    
-    # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
+        # Reset index to align with the list_stocks
+        df_w.reset_index(inplace=True, drop=True)
+
+        # Create a DataFrame to store the results.
+        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()],
+                               columns=df_latest.columns)
+        df_weights = pd.concat([df_weights, df_this], ignore_index=True)
 
     # 10% limit check
-    if len(np.array(df_weights[list_stocks])[np.array(df_weights[list_stocks]) > 0.101]):
-
-        raise Exception(r'---> 10% limit exceeded')
+    if (df_weights[list_stocks] > 0.101).any().any():
+        raise Exception('---> 10% limit exceeded')
 
     return df_returns, df_weights
 
@@ -186,5 +187,3 @@ df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
 fig1
-
-# %%
