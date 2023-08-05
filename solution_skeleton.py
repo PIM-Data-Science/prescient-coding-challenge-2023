@@ -47,7 +47,7 @@ def equalise_weights(df: pd.DataFrame):
 
 
 # %%
-
+# generate portfolio function
 def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
 
     '''
@@ -83,24 +83,25 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # We use a static Inverse Volatility Weighting (https://en.wikipedia.org/wiki/Inverse-variance_weighting) 
     # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
-    
+
     for i in range(len(df_test)):
 
-        # latest data at this point
-        df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-                
-        # vol calc
-        df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
-        df_w.reset_index(inplace=True, names='name')
+        # calculate covariance matrix and mean
+        cov_matrix, mean_returns = df_returns[list_stocks].cov(), df_returns[list_stocks].mean()
+
+        # perform mean-variance
+        optimized_weights = np.linalg.inv(cov_matrix) @ mean_returns
+
+        # cap weights at 10%
+        optimized_weights = np.clip(optimized_weights, 0, 0.1)
+
+        # normalize weights
+        optimized_weights = optimized_weights / np.sum(optimized_weights)
 
         # add to all weights
-        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
+        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + optimized_weights.tolist()], columns=df_returns.columns)
         df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
-    
+
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
     
     # 10% limit check
@@ -112,7 +113,7 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
 
 
 # %%
-
+# plot total return function
 
 def plot_total_return(df_returns: pd.DataFrame, df_weights_index: pd.DataFrame, df_weights_portfolio: pd.DataFrame):
 
@@ -171,3 +172,5 @@ df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
 fig1
+
+# %%
