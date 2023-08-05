@@ -104,12 +104,6 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
         df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + optimized_weights.tolist()], columns=df_returns.columns)
         df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
 
-
-    for i in range(len(df_test)):
-
-        # latest data at this point
-        df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
     
     # 10% limit check
