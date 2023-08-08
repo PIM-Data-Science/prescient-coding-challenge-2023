@@ -83,20 +83,61 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # We use a static Inverse Volatility Weighting (https://en.wikipedia.org/wiki/Inverse-variance_weighting) 
     # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
-    
+    def totalR(w, returns):        
+        tr = 0
+        for i in range(54):
+            tr += (w[i]*returns[i])
+        return tr + 1
+
+    ''' Monte Carlo Approach - works 70% of the time unfortunately
+    def optTr(r):
+        yM = 0
+        xM = []
+        for t in range(100000000000):
+            x1 = np.random.uniform(0, 0.1, 53)
+            max_value = 1 - np.sum(x1)
+            x1 = np.append(x1, np.random.uniform(0, max_value)).tolist()
+
+            y = totalR(x1, r)
+            if y>yM:
+                yM = y
+                xM = x1
+            return xM, yM
+    '''
+   # The following code uses a predetermined array of weights which gets reordered depending on which order returns the highest total returns
+   # Once the best order of weights is found for the past data, the weights are used for the plot
+    def optTr(r):
+        yM = 0
+        x1 = [0.08919999999999961,0.1,0.08,0.09,0.06,0.06,0.03,0,0.02,0.02,0.02,0.005, 0.005,0.0001,0.0001,0.01,0.01,0.01,0.01,0.01,0.02,0.02,0.02,0.02,0.005, 0.005,0.0001,0.0001,0.01,0.01,0.01,0.01,0.01,0.02,0.02,0.02,0.02,0.005, 0.005,0.0001,0.0001,0.01,0.01,0.01,0.01,0.01,0.02,0.02,0.02,0.02,0.005, 0.005,0.0001,0.0001]
+        xM = []
+        for t in range(54):
+            xtemp = [0.08919999999999961,0.09,0.09,0.09,0.06,0.06,0.03,0,0.02,0.02,0.02,0.005, 0.005,0.0001,0.0001,0.01,0.01,0.01,0.01,0.01,0.02,0,0,0.06,0.005, 0.005,0.0001,0.0001,0.01,0.01,0.01,0.01,0.01,0.02,0.02,0.02,0.02,0.005, 0.005,0.0001,0.0001,0.01,0.01,0.01,0.01,0.01,0.02,0.02,0.02,0.02,0.005, 0.005,0.0001,0.0001]
+            for xx in range(len(xM)):
+                x1[xx] = xtemp.pop(t)
+            
+            y = totalR(x1, r)
+            if y>yM:
+                yM = y
+                xM = x1
+            return xM, yM
+
     for i in range(len(df_test)):
 
         # latest data at this point
         df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-                
-        # vol calc
-        df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
-        df_w.reset_index(inplace=True, names='name')
+        df_latest_arr = df_latest.to_numpy().tolist()
 
+        trsX = []
+        trsY = []
+        for r in df_latest_arr:
+            found = optTr(r[1:])
+            trsX.append(found[0])
+            trsY.append(found[1])
+
+        df_w = pd.DataFrame()
+        df_w['weight'] = trsX[i]
+
+        
         # add to all weights
         df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
         df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
@@ -171,3 +212,5 @@ df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
 fig1
+
+# %%
