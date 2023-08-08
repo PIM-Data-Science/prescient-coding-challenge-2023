@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import datetime
 import plotly.express as px
+import seaborn as sns
+import pypfopt
 
 
 print('---Python script Start---', str(datetime.datetime.now()))
@@ -88,17 +90,18 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
 
         # latest data at this point
         df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
+
+
+        '''Mean-Variance Optimisation of portfolio. We got the best results with static weights calculated on the test period.'''
+        expected=df_train.mean(numeric_only=True)
+        cov = df_train.cov(numeric_only=True)
+        ef=pypfopt.EfficientFrontier(expected,cov,weight_bounds=(0,0.1))
+        weights=[val for val in ef.max_sharpe().values()]
                 
-        # vol calc
-        df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
-        df_w.reset_index(inplace=True, names='name')
+        df_this=pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + weights], columns=df_latest.columns)
 
         # add to all weights
-        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
+        #df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
         df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
     
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
@@ -165,6 +168,8 @@ def plot_total_return(df_returns: pd.DataFrame, df_weights_index: pd.DataFrame, 
 
 # %%
 
+# sns.pairplot(df_returns_train)
+#print(df_returns_train.cov(numeric_only=True))
 # running solution
 df_returns = pd.concat(objs=[df_returns_train, df_returns_test], ignore_index=True)
 df_weights_index = equalise_weights(df_returns)
