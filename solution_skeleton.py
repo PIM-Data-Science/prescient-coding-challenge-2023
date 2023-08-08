@@ -4,6 +4,13 @@ import pandas as pd
 import datetime
 import plotly.express as px
 
+# Use the pypfopt library
+from pypfopt.efficient_frontier import EfficientCVaR
+from pypfopt.risk_models import risk_matrix
+from pypfopt.expected_returns import mean_historical_return
+
+
+
 
 print('---Python script Start---', str(datetime.datetime.now()))
 
@@ -84,22 +91,40 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
     
+    # It's simpler to write our own than figure out what's going
+    # wrong with pandas's inbuilt dict_to_df
+    def dict_to_df(dic):
+        new_dic = {}
+        
+        for key in dic:
+            new_dic[key] = [dic[key]]
+
+        return pd.DataFrame(new_dic)
+    
     for i in range(len(df_test)):
 
         # latest data at this point
         df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
                 
-        # vol calc
-        df_w = pd.DataFrame()
-        df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
-        df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
-        df_w.reset_index(inplace=True, names='name')
+        df_window = df_latest.set_index('month_end').iloc[-5*12:] # We only use the last 5 years in our analysis
+        
+        df_cum = (1 + df_window).cumprod() # cumulative returns
+        
+        # constants
+        TARGET_RETURN = 0.006
+        LOWER_BOUND = 0 # No diversification. divesification bad!
+        UPPER_BOUND = 0.1 # Forced diversification. Me angry!
+        
+        mu = mean_historical_return(df_cum)
+        S = risk_matrix(df_cum, method='sample_cov') # Simple sample covariance works best
+        
+        ef = EfficientCVaR(mu, df_cum, weight_bounds=(LOWER_BOUND, UPPER_BOUND))
+        
+        weights = ef.efficient_return(TARGET_RETURN)
+        df_w =  dict_to_df(weights)
 
         # add to all weights
-        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
-        df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
+        df_weights = pd.concat(objs=[df_weights, df_w], ignore_index=True)
     
     # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
     
