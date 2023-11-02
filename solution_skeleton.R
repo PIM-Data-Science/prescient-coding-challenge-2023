@@ -181,3 +181,6 @@ plot_total_return <- function(df_returns, df_portfolio_weights, return_data = FA
 returns <- bind_rows(returns_train, returns_test)
 portfolio_weights <- generate_portfolio(returns_train, returns_test)
 plot_total_return(returns, portfolio_weights, return_data = FALSE)
+
+
+####
