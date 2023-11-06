@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import plotly.express as px
+from scipy.optimize import minimize
 
 
 print('---Python script Start---', str(datetime.datetime.now()))
@@ -47,6 +48,7 @@ def equalise_weights(df: pd.DataFrame):
 
 
 # %%
+# Define the objective function to maximize
 
 def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
 
@@ -83,36 +85,89 @@ def generate_portfolio(df_train: pd.DataFrame, df_test: pd.DataFrame):
     # We use a static Inverse Volatility Weighting (https://en.wikipedia.org/wiki/Inverse-variance_weighting) 
     # strategy to generate portfolio weights.
     # Use the latest available data at that point in time
-    
+    opt=[]
+    ret=[]
+
     for i in range(len(df_test)):
 
         # latest data at this point
         df_latest = df_returns[(df_returns['month_end'] < df_test.loc[i, 'month_end'])]
-                
+        #print(df_latest)
+        stonk = df_latest.drop(df_latest.columns[0], axis=1)
+        stonk=stonk.loc[i]
         # vol calc
         df_w = pd.DataFrame()
         df_w['vol'] = df_latest.std(numeric_only=True)          # calculate stock volatility
         df_w['inv_vol'] = 1/df_w['vol']                         # calculate the inverse volatility
-        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()             # calculate the total inverse volatility
-        df_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']    # calculate weight based on inverse volatility
+        df_w['tot_inv_vol'] = df_w['inv_vol'].sum()
+        df_w['weight'] = 1/54*(np.ones(54)) #df_w['inv_vol']/df_w['tot_inv_vol'] # calculate the total inverse volatilitydf_w['weight'] = df_w['inv_vol']/df_w['tot_inv_vol']
         df_w.reset_index(inplace=True, names='name')
 
+        #Choose which weights to use
+        if i ==0:
+            weights = np.array(df_w['weight'])
+        else:
+            weights=upweight
+
+        initial_weight=weights.copy()
+
+        #Functions for optimization
+        def objective_function(weights, stonk):
+            Returns = np.dot(weights, stonk)
+            return -Returns  # Minimize the negative of the Returns (maximize the Returns)
+
+        def constraint_sum_to_1(weights):
+            return sum(weights) - 1  # Constraint: sum of weights must be 1
+
+        # Additional constraint: weights cannot be zero (must be greater than or equal to 0.0001)
+        def constraint_nonzero_weights(weights):
+            return weights  # Constraint: weights >= 0.0001
+
+        # Additional constraint: each weight must be less than 0.1
+        def constraint_nonnegative_weights(weights):
+            return 0.1 - weights  # Constraint: weights <= 0.1 for all weights
+
+        # Combine all constraint functions and types into a list of dictionaries
+        constraints = [
+            {'type': 'eq', 'fun': constraint_sum_to_1},   # sum of weights must be 1
+            {'type': 'ineq', 'fun': constraint_nonzero_weights},
+            {'type': 'ineq', 'fun': constraint_nonnegative_weights},  # weights <= 0.1 for all weights
+        ]
+        
+        # Initial weights to optimise
+        initial_guess = weights
+
+        # Minimize the negative of the objective function to maximize the original objective
+        result = minimize(objective_function, initial_guess, args=(stonk,), constraints=constraints )
+
+        opt_weight=result.x
+
+        Return= np.dot(opt_weight, stonk)
+        OldReturn=np.dot(initial_weight, stonk)
+
+        #Check if  the new weights are better. If not continue using old weights
+        if Return> OldReturn:
+            upweight = opt_weight
+        else:
+            upweight=initial_weight
+
+
+        df_w['weight1'] = (opt_weight)
+        print(df_w)
+
         # add to all weights
-        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight'].to_list()], columns=df_latest.columns)
+        df_this = pd.DataFrame(data=[[df_test.loc[i, 'month_end']] + df_w['weight1'].to_list()], columns=df_latest.columns)
         df_weights = pd.concat(objs=[df_weights, df_this], ignore_index=True)
-    
-    # <<--------------------- YOUR CODE GOES ABOVE THIS LINE --------------------->>
-    
+
+
     # 10% limit check
     if len(np.array(df_weights[list_stocks])[np.array(df_weights[list_stocks]) > 0.101]):
 
         raise Exception(r'---> 10% limit exceeded')
 
+
     return df_returns, df_weights
-
-
 # %%
-
 
 def plot_total_return(df_returns: pd.DataFrame, df_weights_index: pd.DataFrame, df_weights_portfolio: pd.DataFrame):
 
@@ -170,4 +225,4 @@ df_returns = pd.concat(objs=[df_returns_train, df_returns_test], ignore_index=Tr
 df_weights_index = equalise_weights(df_returns)
 df_returns, df_weights_portfolio = generate_portfolio(df_returns_train, df_returns_test)
 fig1, df_rtn = plot_total_return(df_returns, df_weights_index=df_weights_index, df_weights_portfolio=df_weights_portfolio)
-fig1
+fig1.show()
